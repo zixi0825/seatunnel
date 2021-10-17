@@ -1,10 +1,10 @@
 package io.github.interestinglab.waterdrop.spark.stream
 
 import java.util.{List => JList}
-
 import io.github.interestinglab.waterdrop.config.{Config, ConfigFactory}
 import io.github.interestinglab.waterdrop.common.config.CheckResult
 import io.github.interestinglab.waterdrop.env.Execution
+import io.github.interestinglab.waterdrop.plugin.Plugin
 import io.github.interestinglab.waterdrop.spark.{BaseSparkSink, BaseSparkSource, BaseSparkTransform, SparkEnvironment}
 import io.github.interestinglab.waterdrop.spark.batch.SparkBatchExecution
 import org.apache.spark.sql.{Dataset, Row}
@@ -21,19 +21,17 @@ class SparkStreamingExecution(sparkEnvironment: SparkEnvironment) extends Execut
 
     val source = sources.get(0).asInstanceOf[SparkStreamingSource[_]]
 
-    sources.subList(1, sources.size()).foreach(s => {
-      SparkBatchExecution.registerInputTempView(s.asInstanceOf[BaseSparkSource[Dataset[Row]]], sparkEnvironment)
-    })
+    sources.subList(1, sources.size()).foreach(s => SparkEnvironment.registerInputTempView(s, sparkEnvironment))
     source.start(sparkEnvironment, dataset => {
       val conf = source.getConfig
-      if (conf.hasPath(SparkBatchExecution.resultTableName)) {
-        SparkBatchExecution.registerTempView(conf.getString(SparkBatchExecution.resultTableName), dataset)
+      if (conf.hasPath(Plugin.RESULT_TABLE_NAME)) {
+        SparkEnvironment.registerTempView(conf.getString(Plugin.RESULT_TABLE_NAME), dataset)
       }
       var ds = dataset
       for (tf <- transforms) {
         if (ds.take(1).length > 0) {
-          ds = SparkBatchExecution.transformProcess(sparkEnvironment, tf, ds)
-          SparkBatchExecution.registerTransformTempView(tf, ds)
+          ds = SparkEnvironment.transformProcess(sparkEnvironment, tf, ds)
+          SparkEnvironment.registerTransformTempView(tf, ds)
         }
       }
 
@@ -41,7 +39,7 @@ class SparkStreamingExecution(sparkEnvironment: SparkEnvironment) extends Execut
 
       if (ds.take(1).length > 0) {
         sinks.foreach(sink => {
-          SparkBatchExecution.sinkProcess(sparkEnvironment, sink, ds)
+          SparkEnvironment.sinkProcess(sparkEnvironment, sink, ds)
         })
       }
 
@@ -57,7 +55,7 @@ class SparkStreamingExecution(sparkEnvironment: SparkEnvironment) extends Execut
 
   override def getConfig: Config = config
 
-  override def checkConfig(): CheckResult = new CheckResult(true,"")
+  override def checkConfig(): CheckResult = new CheckResult(true, "")
 
   override def prepare(void: Void): Unit = {}
 }

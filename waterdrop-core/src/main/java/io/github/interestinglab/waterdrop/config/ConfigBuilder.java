@@ -1,6 +1,7 @@
 package io.github.interestinglab.waterdrop.config;
 
 import io.github.interestinglab.waterdrop.common.config.ConfigRuntimeException;
+import io.github.interestinglab.waterdrop.common.enums.JobMode;
 import io.github.interestinglab.waterdrop.env.Execution;
 import io.github.interestinglab.waterdrop.env.RuntimeEnv;
 import io.github.interestinglab.waterdrop.flink.FlinkEnvironment;
@@ -10,6 +11,7 @@ import io.github.interestinglab.waterdrop.plugin.Plugin;
 import io.github.interestinglab.waterdrop.spark.SparkEnvironment;
 import io.github.interestinglab.waterdrop.spark.batch.SparkBatchExecution;
 import io.github.interestinglab.waterdrop.spark.stream.SparkStreamingExecution;
+import io.github.interestinglab.waterdrop.spark.structuredstream.StructuredStreamingExecution;
 import io.github.interestinglab.waterdrop.utils.Engine;
 import io.github.interestinglab.waterdrop.utils.PluginType;
 
@@ -26,7 +28,7 @@ public class ConfigBuilder {
     private Engine engine;
     private ConfigPackage configPackage;
     private Config config;
-    private boolean streaming;
+    private JobMode jobMode;
     private Config envConfig;
     private RuntimeEnv env;
 
@@ -75,10 +77,16 @@ public class ConfigBuilder {
         return env;
     }
 
-    private boolean checkIsStreaming() {
-        List<? extends Config> sourceConfigList = config.getConfigList(PluginType.SOURCE.getType());
+    private void setJobMode(Config envConfig) {
+        if (envConfig.hasPath("job.mode")) {
+            jobMode = envConfig.getEnum(JobMode.class, "job.mode");
+        } else {
+            //兼容以前逻辑
+            List<? extends Config> sourceConfigList = config.getConfigList(PluginType.SOURCE.getType());
+            jobMode = sourceConfigList.get(0).getString(PLUGIN_NAME_KEY).toLowerCase().endsWith("stream")
+                    ? JobMode.STREAMING : JobMode.BATCH;
+        }
 
-        return sourceConfigList.get(0).getString(PLUGIN_NAME_KEY).toLowerCase().endsWith("stream");
     }
 
     /**
@@ -144,7 +152,7 @@ public class ConfigBuilder {
         configList.forEach(plugin -> {
             try {
                 final String className = buildClassFullQualifier(plugin.getString(PLUGIN_NAME_KEY), type);
-                T t =  (T) Class.forName(className).newInstance();
+                T t = (T) Class.forName(className).newInstance();
                 t.setConfig(plugin);
                 basePluginList.add(t);
             } catch (Exception e) {
@@ -157,7 +165,7 @@ public class ConfigBuilder {
 
     private RuntimeEnv createEnv() {
         envConfig = config.getConfig("env");
-        streaming = checkIsStreaming();
+        setJobMode(envConfig);
         RuntimeEnv env = null;
         switch (engine) {
             case SPARK:
@@ -170,7 +178,7 @@ public class ConfigBuilder {
                 break;
         }
         env.setConfig(envConfig);
-        env.prepare(streaming);
+        env.prepare(jobMode);
         return env;
     }
 
@@ -180,15 +188,17 @@ public class ConfigBuilder {
         switch (engine) {
             case SPARK:
                 SparkEnvironment sparkEnvironment = (SparkEnvironment) env;
-                if (streaming) {
+                if (JobMode.STREAMING.equals(jobMode)) {
                     execution = new SparkStreamingExecution(sparkEnvironment);
+                } else if (JobMode.STRUCTURED_STREAMING.equals(jobMode)) {
+                    execution = new StructuredStreamingExecution(sparkEnvironment);
                 } else {
                     execution = new SparkBatchExecution(sparkEnvironment);
                 }
                 break;
             case FLINK:
                 FlinkEnvironment flinkEnvironment = (FlinkEnvironment) env;
-                if (streaming) {
+                if (JobMode.STREAMING.equals(jobMode)) {
                     execution = new FlinkStreamExecution(flinkEnvironment);
                 } else {
                     execution = new FlinkBatchExecution(flinkEnvironment);

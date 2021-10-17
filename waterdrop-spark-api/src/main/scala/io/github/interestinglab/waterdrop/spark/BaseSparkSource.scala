@@ -11,6 +11,6 @@ trait BaseSparkSource[Data] extends BaseSource[SparkEnvironment] {
 
   override def getConfig: Config = config
 
-  def getData(env: SparkEnvironment): Data;
+  def getData(env: SparkEnvironment): Data
 
 }

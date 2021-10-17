@@ -27,85 +27,21 @@ class SparkBatchExecution(environment: SparkEnvironment)
                      transforms: JList[BaseSparkTransform],
                      sinks: JList[SparkBatchSink]): Unit = {
 
-    sources.foreach(s => {
-      SparkBatchExecution.registerInputTempView(s.asInstanceOf[BaseSparkSource[Dataset[Row]]], environment)
-    })
+    sources.foreach(s => SparkEnvironment.registerInputTempView(s, environment))
+
     if (!sources.isEmpty) {
       var ds = sources.get(0).getData(environment)
       for (tf <- transforms) {
 
         if (ds.take(1).length > 0) {
-          ds = SparkBatchExecution.transformProcess(environment, tf, ds)
-          SparkBatchExecution.registerTransformTempView(tf, ds)
+          ds = SparkEnvironment.transformProcess(environment, tf, ds)
+          SparkEnvironment.registerTransformTempView(tf, ds)
         }
       }
 
-      // if (ds.take(1).length > 0) {
-      sinks.foreach(sink => {
-        SparkBatchExecution.sinkProcess(environment, sink, ds)
-      })
-      // }
+      sinks.foreach(sink => SparkEnvironment.sinkProcess(environment, sink, ds))
     }
   }
 
 }
 
-
-object SparkBatchExecution {
-
-  private[waterdrop] val sourceTableName = "source_table_name"
-  private[waterdrop] val resultTableName = "result_table_name"
-
-  private[waterdrop] def registerTempView(tableName: String, ds: Dataset[Row]): Unit = {
-    ds.createOrReplaceTempView(tableName)
-  }
-
-  private[waterdrop] def registerInputTempView(source: BaseSparkSource[Dataset[Row]], environment: SparkEnvironment): Unit = {
-    val conf = source.getConfig
-    conf.hasPath(SparkBatchExecution.resultTableName) match {
-      case true => {
-        val tableName = conf.getString(SparkBatchExecution.resultTableName)
-        registerTempView(tableName, source.getData(environment))
-      }
-      case false => {
-        throw new ConfigRuntimeException(
-          "Plugin[" + source.getClass.getName + "] must be registered as dataset/table, please set \"result_table_name\" config")
-
-      }
-    }
-  }
-
-  private[waterdrop] def transformProcess(environment: SparkEnvironment, transform: BaseSparkTransform, ds: Dataset[Row]): Dataset[Row] = {
-    val config = transform.getConfig()
-    val fromDs = config.hasPath(SparkBatchExecution.sourceTableName) match {
-      case true => {
-        val sourceTableName = config.getString(SparkBatchExecution.sourceTableName)
-        environment.getSparkSession.read.table(sourceTableName)
-      }
-      case false => ds
-    }
-
-    transform.process(fromDs, environment)
-  }
-
-  private[waterdrop] def registerTransformTempView(plugin: BaseSparkTransform, ds: Dataset[Row]): Unit = {
-    val config = plugin.getConfig()
-    if (config.hasPath(SparkBatchExecution.resultTableName)) {
-      val tableName = config.getString(SparkBatchExecution.resultTableName)
-      registerTempView(tableName, ds)
-    }
-  }
-
-  private[waterdrop] def sinkProcess(environment: SparkEnvironment, sink: BaseSparkSink[_], ds: Dataset[Row]): Unit = {
-    val config = sink.getConfig()
-    val fromDs = config.hasPath(SparkBatchExecution.sourceTableName) match {
-      case true => {
-        val sourceTableName = config.getString(SparkBatchExecution.sourceTableName)
-        environment.getSparkSession.read.table(sourceTableName)
-      }
-      case false => ds
-    }
-
-    sink.output(fromDs, environment)
-  }
-}

@@ -80,6 +80,7 @@
         <module>plugin-spark-sink-mysql</module>
         <module>plugin-spark-sink-email</module>
         <module>waterdrop-config</module>
+        <module>plugin-spark-structured-source-kafka</module>
     </modules>
 
     <properties>
