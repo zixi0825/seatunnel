@@ -21,7 +21,10 @@ class SparkStreamingExecution(sparkEnvironment: SparkEnvironment) extends Execut
 
     val source = sources.get(0).asInstanceOf[SparkStreamingSource[_]]
 
-    sources.subList(1, sources.size()).foreach(s => SparkEnvironment.registerInputTempView(s, sparkEnvironment))
+    sources.subList(1, sources.size()).foreach(s => {
+      SparkEnvironment.registerInputTempView(s.asInstanceOf[BaseSparkSource[Dataset[Row]]], sparkEnvironment)
+    })
+
     source.start(sparkEnvironment, dataset => {
       val conf = source.getConfig
       if (conf.hasPath(Plugin.RESULT_TABLE_NAME)) {

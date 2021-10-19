@@ -25,7 +25,7 @@ class StructuredStreamingExecution(environment: SparkEnvironment) extends Execut
                      sinks: JList[StructuredStreamingSink]): Unit = {
     val dsList = sources.map(s => {
       val ds = s.getData(environment)
-      SparkEnvironment.registerInputTempView(ds, environment)
+      SparkEnvironment.registerInputTempView(s, environment)
       ds
     })
 

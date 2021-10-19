@@ -164,4 +164,4 @@ class KafkaStream extends StructuredStreamingSource {
       offsetMeta.put(topic, partition2offset)
     })
   }
-}}
+}
